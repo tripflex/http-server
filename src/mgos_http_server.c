@@ -47,6 +47,7 @@ static struct mg_serve_http_opts s_http_server_opts;
 #endif
 static struct mg_connection *s_listen_conn;
 static struct mg_connection *s_listen_conn_tun;
+static struct mg_connection *s_listen_conn_ssl;
 
 #if MGOS_ENABLE_WEB_CONFIG
 
@@ -228,10 +229,8 @@ bool mgos_http_server_init(void) {
 
   struct mg_bind_opts opts;
   memset(&opts, 0, sizeof(opts));
+
 #if MG_ENABLE_SSL
-  opts.ssl_cert = mgos_sys_config_get_http_ssl_cert();
-  opts.ssl_key = mgos_sys_config_get_http_ssl_key();
-  opts.ssl_ca_cert = mgos_sys_config_get_http_ssl_ca_cert();
 #if CS_PLATFORM == CS_P_ESP8266
 /*
  * ESP8266 cannot handle DH of any kind, unless there's hardware acceleration,
@@ -258,22 +257,51 @@ bool mgos_http_server_init(void) {
         "TLS-RSA-WITH-AES-128-CBC-SHA256:"
         "TLS-RSA-WITH-AES-128-CBC-SHA";
 #endif /* CS_PLATFORM == CS_P_ESP8266 */
-#endif /* MG_ENABLE_SSL */
-  s_listen_conn =
-      mg_bind_opt(mgos_get_mgr(), mgos_sys_config_get_http_listen_addr(),
-                  mgos_http_ev, NULL, opts);
 
+  if( mgos_sys_config_get_http_ssl_cert() ){
+
+    if( mgos_sys_config_get_http_enable_ssl() ){
+      
+      struct mg_bind_opts ssl_opts;
+      memset(&ssl_opts, 0, sizeof(ssl_opts));
+      
+      ssl_opts.ssl_cert = mgos_sys_config_get_http_ssl_cert();
+      ssl_opts.ssl_key = mgos_sys_config_get_http_ssl_key();
+      ssl_opts.ssl_ca_cert = mgos_sys_config_get_http_ssl_ca_cert();
+      if( opts.ssl_cipher_suites ){
+        ssl_opts.ssl_cipher_suites = opts.ssl_cipher_suites;
+      }
+
+      s_listen_conn_ssl = mg_bind_opt(mgos_get_mgr(), mgos_sys_config_get_http_listen_addr_ssl(), mgos_http_ev, NULL, ssl_opts);
+
+      if (!s_listen_conn_ssl) {
+        LOG(LL_ERROR, ("Error binding to [%s]", mgos_sys_config_get_http_listen_addr_ssl()));
+      } else {
+        LOG(LL_INFO, ("HTTP server started on [%s] (SSL)", mgos_sys_config_get_http_listen_addr_ssl() ) );
+        s_listen_conn_ssl->recv_mbuf_limit = MGOS_RECV_MBUF_LIMIT;
+      }
+      
+    } else {
+
+      opts.ssl_cert = mgos_sys_config_get_http_ssl_cert();
+      opts.ssl_key = mgos_sys_config_get_http_ssl_key();
+      opts.ssl_ca_cert = mgos_sys_config_get_http_ssl_ca_cert();
+
+    }
+  }
+
+#endif /* MG_ENABLE_SSL */
+
+  s_listen_conn = mg_bind_opt(mgos_get_mgr(), mgos_sys_config_get_http_listen_addr(), mgos_http_ev, NULL, opts);
   if (!s_listen_conn) {
-    LOG(LL_ERROR,
-        ("Error binding to [%s]", mgos_sys_config_get_http_listen_addr()));
+    LOG(LL_ERROR, ("Error binding to [%s]", mgos_sys_config_get_http_listen_addr()));
     return false;
   }
 
   s_listen_conn->recv_mbuf_limit = MGOS_RECV_MBUF_LIMIT;
 
   mg_set_protocol_http_websocket(s_listen_conn);
-  LOG(LL_INFO,
-      ("HTTP server started on [%s]%s", mgos_sys_config_get_http_listen_addr(),
+  LOG(LL_INFO, ("HTTP server started on [%s]%s", mgos_sys_config_get_http_listen_addr(),
 #if MG_ENABLE_SSL
        (opts.ssl_cert ? " (SSL)" : "")
 #else
@@ -299,6 +327,9 @@ void mgos_register_http_endpoint_opt(const char *uri_path,
   if (s_listen_conn != NULL) {
     mg_register_http_endpoint_opt(s_listen_conn, uri_path, handler, opts);
   }
+  if (s_listen_conn_ssl != NULL) {
+    mg_register_http_endpoint_opt(s_listen_conn_ssl, uri_path, handler, opts);
+  }
   if (s_listen_conn_tun != NULL) {
     mg_register_http_endpoint_opt(s_listen_conn_tun, uri_path, handler, opts);
   }
@@ -316,6 +347,10 @@ void mgos_register_http_endpoint(const char *uri_path,
 
 struct mg_connection *mgos_get_sys_http_server(void) {
   return s_listen_conn;
+}
+
+struct mg_connection *mgos_get_sys_http_server_ssl(void) {
+  return s_listen_conn_ssl;
 }
 
 void mgos_http_server_set_document_root(const char *document_root) {

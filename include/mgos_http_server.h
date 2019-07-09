@@ -30,6 +30,7 @@ extern "C" {  // Make sure we have C-declarations in C++ programs
  * Return global listening connection
  */
 struct mg_connection *mgos_get_sys_http_server(void);
+struct mg_connection *mgos_get_sys_http_server_ssl(void);
 
 /*
  * Register HTTP endpoint handler `handler` on URI `uri_path`

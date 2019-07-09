@@ -10,7 +10,9 @@ includes:
 config_schema:
   - ["http", "o", {title: "HTTP Server"}]
   - ["http.enable", "b", true, {title: "Enable HTTP Server"}]
+  - ["http.enable_ssl", "b", true, {title: "Enable HTTP SSL Server feature (to allow both HTTP and HTTPS connections)"}]
   - ["http.listen_addr", "s", "80", {title: "Listening port / address"}]
+  - ["http.listen_addr_ssl", "s", "443", {title: "Listening port / address for SSL connections"}]
   - ["http.document_root", "s", "/", {title: "Root for serving files. Setting to empty disables file serving."}]
   - ["http.ssl_cert", "s", {title: "Turn on SSL on the listener, use this cert"}]
   - ["http.ssl_key", "s", {title: "SSL key to use"}]
